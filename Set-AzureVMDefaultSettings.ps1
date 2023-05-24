@@ -25,10 +25,8 @@ Set the Interactive Login to "Do not display the last username".
 Set language to En-US and keyboard to German.
 Create the C:\Temp folder, if it does not exist.
 Remove description of the Local Administrator Account.
-
 Automount disable
 Ipv4 before ipv6
-
 Set controlled folder access to audit mode
 Enable 'Local Security Authority (LSA) protection
 Disable 'Enumerate administrator accounts on elevation'"
@@ -36,7 +34,6 @@ Disable Microsoft Defender Firewall notifications when programs are blocked for 
 Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile
 Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile
 Enable 'Apply UAC restrictions to local accounts on network logons
-
 Disable 'Installation and configuration of Network Bridge on your DNS domain network
 Needed for Application Guard
 Enable 'Require domain users to elevate when setting a network's location
@@ -56,6 +53,8 @@ Disable Anonymous enumeration of shares
 Set 'Remote Desktop security level' to 'TLS'
 Set user authentication for remote connections by using Network Level Authentication to 'Enabled'
 Create new local Admin without sid500
+Automatic Download ADConnect (Switch)
+Install Domain-Controller Tools on Domain Controller (Switch)
 
 Restart the server to apply all changes, five seconds after running the last command.
 
@@ -66,10 +65,21 @@ Restart the server to apply all changes, five seconds after running the last com
 Disclaimer:     This script is provided "As Is" with no warranties.
 .EXAMPLE
 .\Set-AzureVMDefaultSettings.ps1
+.\Set-AzureVMDefaultSettings.ps1 -AdminUsername "azadmin" -AdminPassword "password"
+.\Set-AzureVMDefaultSettings.ps1 -ADDomainServices
+.\Set-AzureVMDefaultSettings.ps1 -ADConnect
 .LINK
 #>
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Parameters
+Param(
+    [string]$AdminUsername,
+    [string]$AdminPassword,
+    [switch]$ADDomainServices,
+    [switch]$ADConnect
+)
 
 ## Variables
 
@@ -98,7 +108,7 @@ $administratorName = $env:UserName
 
 $writeEmptyLine = "`n"
 $writeSeperatorSpaces = " - "
-$global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action {$global:currenttime= Get-Date -UFormat "%A %m/%d/%Y %R"}
+$global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action {Get-Date -UFormat "%A %m/%d/%Y %R"}
 $foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
 
@@ -108,7 +118,7 @@ $foregroundColor2 = "Yellow"
 
 if ($isAdministrator -eq $false) {
         # Check if running as Administrator, otherwise exit the script
-        Write-Host ($writeEmptyLine + "# Please run PowerShell as Administrator" + $writeSeperatorSpaces + $currentTime)`
+        Write-Host ($writeEmptyLine + "# Please run PowerShell as Administrator" + $writeSeperatorSpaces + $global:currenttime)`
         -foregroundcolor $foregroundColor1 $writeEmptyLine
         Start-Sleep -s 3
         exit
@@ -659,6 +669,7 @@ Set-MpPreference -PUAProtection Enabled
 Set-MpPreference -MAPSReporting Advanced
 Set-MpPreference -SubmitSamplesConsent SendAllSamples
 
+Get-MpPreference 
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -673,7 +684,7 @@ function Add-LocalAdmin {
     begin {
     }    
     process {
-        New-LocalUser "$NewLocalAdmin" -Password $Password -FullName "$NewLocalAdmin" -Description "Temporary local admin"
+        New-LocalUser "$NewLocalAdmin" -Password $Password -FullName "$NewLocalAdmin" -Description ""
         Write-Verbose "$NewLocalAdmin local user crated"
         Add-LocalGroupMember -Group "Administrators" -Member "$NewLocalAdmin"
         Write-Verbose "$NewLocalAdmin added to the local administrator group"
@@ -681,10 +692,59 @@ function Add-LocalAdmin {
     end {
     }
 }
+
+if ($AdminUsername) {
+
+    Write-Host ($writeEmptyLine + "Creating local admin -> user set to:" + $AdminUsername + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+
 ## Add to KeyVault
-    $NewLocalAdmin = "azla" #Read-Host "New local admin username:"
-    $Password = "AzPa554&55!#bTz" #Read-Host -AsSecureString "Create a password for $NewLocalAdmin"
-    #Add-LocalAdmin -NewLocalAdmin $NewLocalAdmin -Password $Password -Verbose
+    if ($AdminPassword) {
+    [Security.SecureString]$securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+    Write-Host ($writeEmptyLine + "Creating local admin -> password is set" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+        Add-LocalAdmin -NewLocalAdmin $AdminUsername -Password $securePassword -Verbose
+    }
+}
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Download AD-Connect
+
+if ($ADConnect) {
+
+    $ADConnectUrl = "https://www.microsoft.com/en-us/download/confirmation.aspx?id=47594"
+
+    Write-Host ($writeEmptyLine + "Download AD-Connect" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+
+    $source=Invoke-WebRequest $ADConnectUrl -UseBasicParsing -MaximumRedirection 0 
+    $source.Links | Where-Object {$_.innerText -contains "download"} |Select-Object -expand href -OutVariable $sourceadw
+    $webrequest = $source.Links | Where-Object {$_.href -like "*.msi"} | Select-Object -expand href
+    $outpath = "C:\Install\" + $(split-path -path "$webrequest" -leaf)
+    Invoke-WebRequest $webrequest[0] -UseBasicParsing -OutFile $outpath
+
+}
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Install Windows Features for Domain Controllers
+
+if ($ADDomainServices) {
+    
+    Write-Host ($writeEmptyLine + "Install AD-Domain-Services" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Install-WindowsFeature -name AD-Domain-Services -IncludeManagementTools
+}
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Extend Partition OS Drive
+
+$driveLetter = "C"
+
+$MaxSize = (Get-PartitionSupportedSize -DriveLetter $driveLetter).sizeMax
+if ((get-partition -driveletter C).size -eq $MaxSize) {
+    Write-Output "The drive $driveLetter is already at its maximum drive size"
+}else {
+    Resize-Partition -DriveLetter $driveLetter -Size $MaxSize
+    Write-Output "The drive $driveLetter was already at its maximum drive size, nothing changed"
+}
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -695,3 +755,4 @@ Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" 
 
 Start-Sleep -s 5
 Restart-Computer -ComputerName localhost
+
