@@ -115,7 +115,7 @@ $foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
 
 Set-Content -Encoding UTF8 -Path "c:\temp\AzureVMDefaultSettingsResult.txt" -Value "" 
-
+Add-Content -Encoding UTF8 -Path "c:\temp\AzureVMDefaultSettingsResult.txt" -Value "C O F  # Changed | OK | Failed"
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 function Add-Result {
