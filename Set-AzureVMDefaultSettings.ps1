@@ -699,7 +699,7 @@ if ($AdminUsername) {
 
 ## Add to KeyVault
     if ($AdminPassword) {
-    [Security.SecureString]$securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+    [Security.SecureString]$securePassword = ConvertTo-SecureString $AdminPassword -AsPlainText -Force
     Write-Host ($writeEmptyLine + "Creating local admin -> password is set" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
         Add-LocalAdmin -NewLocalAdmin $AdminUsername -Password $securePassword -Verbose
     }
