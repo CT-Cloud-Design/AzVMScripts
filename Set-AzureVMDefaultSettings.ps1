@@ -108,9 +108,55 @@ $administratorName = $env:UserName
 
 $writeEmptyLine = "`n"
 $writeSeperatorSpaces = " - "
-$global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action {Get-Date -UFormat "%A %m/%d/%Y %R"}
+$global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action {$global:currenttime= Get-Date -UFormat "%A %m/%d/%Y %R"}
 $foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Create the folders, if it does not exist.
+
+if (!(test-path $tempFolder))
+{
+    New-Item -ItemType Directory -Path $tempFolder -Force | Out-Null
+
+    Write-Host ($writeEmptyLine + "# $tempFolder folder created" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+else {
+    Write-Host ($writeEmptyLine + "# $tempFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+
+## ------------
+
+if (!(test-path $installFolder))
+{
+    New-Item -ItemType Directory -Path $installFolder -Force | Out-Null
+
+    Write-Host ($writeEmptyLine + "# $installFolder folder created" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+else {
+    Write-Host ($writeEmptyLine + "# $installFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+
+## ------------
+
+if (!(test-path $scriptsFolder))
+{
+    New-Item -ItemType Directory -Path $scriptsFolder -Force | Out-Null
+
+    Write-Host ($writeEmptyLine + "# $scriptsFolder folder created" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+else {
+    Write-Host ($writeEmptyLine + "# $scriptsFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
+    -foregroundcolor $foregroundColor2 $writeEmptyLine
+}
+
+Start-Transcript -OutputDirectory "C:\Temp\"
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -384,52 +430,6 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
 	    Write-Host ($writeEmptyLine + "# Keybord all ready set to German" + $writeSeperatorSpaces + $currentTime)`
         -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
-
-## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-## Create the folders, if it does not exist.
-
-if (!(test-path $tempFolder))
-{
-    New-Item -ItemType Directory -Path $tempFolder -Force | Out-Null
-
-    Write-Host ($writeEmptyLine + "# $tempFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-else {
-    Write-Host ($writeEmptyLine + "# $tempFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-
-## ------------
-
-if (!(test-path $installFolder))
-{
-    New-Item -ItemType Directory -Path $installFolder -Force | Out-Null
-
-    Write-Host ($writeEmptyLine + "# $installFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-else {
-    Write-Host ($writeEmptyLine + "# $installFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-
-## ------------
-
-if (!(test-path $scriptsFolder))
-{
-    New-Item -ItemType Directory -Path $scriptsFolder -Force | Out-Null
-
-    Write-Host ($writeEmptyLine + "# $scriptsFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-else {
-    Write-Host ($writeEmptyLine + "# $scriptsFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
-}
-
-
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -752,6 +752,8 @@ if ((get-partition -driveletter C).size -eq $MaxSize) {
 
 Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor1 $writeEmptyLine
+
+Stop-Transcript
 
 Start-Sleep -s 5
 Restart-Computer -ComputerName localhost
