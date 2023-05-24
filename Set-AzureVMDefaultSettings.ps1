@@ -287,7 +287,9 @@ $adminIESecurityRegKeyName = "IsInstalled"
 Set-ItemProperty -Path $adminIESecurityRegKeyPath -Name $adminIESecurityRegKeyName -Value 0 | Out-Null
 
 # Stop and start Windows explorer process
-Stop-Process -Name $windowsExplorerProcessName | Out-Null
+if (Get-Process $windowsExplorerProcessName) {
+    Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
+}
 
 Write-Host ($writeEmptyLine + "# IE Enhanced Security Configuration for the Administrator disabled" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine
@@ -370,7 +372,7 @@ $folderOptionsSeperateProcessRegKeyName = "SeperateProcess"
 $folderOptionsAlwaysShowMenusRegKeyName = "AlwaysShowMenus" 
 
 if (!(test-path $folderOptionsRegKeyPath)) {
-    New-Item -Path $folderOptionsRegKeyPath
+    New-Item -Path $folderOptionsRegKeyPath | Out-Null
 }
 
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHiddenRegKeyName -Value 1 | Out-Null
@@ -381,7 +383,9 @@ Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsSeperateProc
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsAlwaysShowMenusRegKeyName -Value 1 | Out-Null
 
 # Stop and start Windows explorer process
-Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
+if (Get-Process $windowsExplorerProcessName) {
+    Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
+}
 
 Write-Host ($writeEmptyLine + "# Folder Options set" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine
@@ -677,8 +681,6 @@ Set-MpPreference -PUAProtection Enabled
 Set-MpPreference -MAPSReporting Advanced
 Set-MpPreference -SubmitSamplesConsent SendAllSamples
 
-Get-MpPreference 
-
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Create new local Admin without sid500
@@ -693,7 +695,7 @@ function Add-LocalAdmin {
     }    
     process {
         New-LocalUser "$NewLocalAdmin" -Password $Password -FullName "$NewLocalAdmin" -Description ""
-        Write-Verbose "$NewLocalAdmin local user crated"
+        Write-Verbose "$NewLocalAdmin local user created"
         Add-LocalGroupMember -Group "Administrators" -Member "$NewLocalAdmin"
         Write-Verbose "$NewLocalAdmin added to the local administrator group"
     }    
@@ -705,11 +707,13 @@ if ($AdminUsername) {
 
     Write-Host ($writeEmptyLine + "Creating local admin -> user set to:" + $AdminUsername + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
-## Add to KeyVault
     if ($AdminPassword) {
     [Security.SecureString]$securePassword = ConvertTo-SecureString $AdminPassword -AsPlainText -Force
     Write-Host ($writeEmptyLine + "Creating local admin -> password is set" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
         Add-LocalAdmin -NewLocalAdmin $AdminUsername -Password $securePassword -Verbose
+        if ((Get-LocalUser $AdminUsername).count -eq 1) {
+            Disable-LocalUser -Name aztmpadmin
+        }
     }
 }
 
@@ -760,6 +764,10 @@ if ((get-partition -driveletter C).size -eq $MaxSize) {
 
 Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor1 $writeEmptyLine
+
+Write-Host ($writeEmptyLine + "# Cleanup Script Execution" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor1 $writeEmptyLine
+Get-ChildItem -Recurse -Path C:\WindowsAzure\Logs\Plugins\Microsoft.Compute.CustomScriptExtension -Include CustomScriptHandler.log | Remove-Item
 
 Stop-Transcript
 
