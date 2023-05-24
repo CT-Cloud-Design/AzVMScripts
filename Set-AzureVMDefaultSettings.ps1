@@ -721,9 +721,17 @@ function Add-LocalAdmin {
     }    
     process {
         New-LocalUser "$NewLocalAdmin" -Password $Password -FullName "$NewLocalAdmin" -Description ""
+        Set-LocalUser -Name "$NewLocalAdmin" -UserMayChangePassword:$false -PasswordNeverExpires:$true -AccountNeverExpires:$true
         Write-Verbose "$NewLocalAdmin local user created"
-        Add-LocalGroupMember -Group "Administrators" -Member "$NewLocalAdmin"
-        Write-Verbose "$NewLocalAdmin added to the local administrator group"
+
+        if (Get-LocalGroup -Name "Administrators" -ErrorAction SilentlyContinue) {
+            Add-LocalGroupMember -Group "Administrators" -Member "$NewLocalAdmin"
+            Write-Verbose "$NewLocalAdmin added to the local Administrators group"
+        }
+        if (Get-LocalGroup -Name "Administratoren" -ErrorAction SilentlyContinue) {
+            Add-LocalGroupMember -Group "Administratoren" -Member "$NewLocalAdmin"
+            Write-Verbose "$NewLocalAdmin added to the local Administratoren group"
+        }
     }    
     end {
     }
@@ -783,6 +791,29 @@ if ((get-partition -driveletter C).size -eq $MaxSize) {
     Resize-Partition -DriveLetter $driveLetter -Size $MaxSize
     Write-Output "The drive $driveLetter was already at its maximum drive size, nothing changed"
 }
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## BCEDIT
+
+$hostname = "localhost"
+Invoke-Command { Start-Process -wait -FilePath "cmd.exe"  -ArgumentList '/c "bcdedit /ems {current} on & bcdedit /emssettings EMSPORT:1 EMSBAUDRATE:115200 & bcdedit /set {bootmgr} displaybootmenu yes & bcdedit /set {bootmgr} timeout 30 & bcdedit /set {bootmgr} bootems yes"' } -ComputerName $hostname
+
+Write-Host ($writeEmptyLine + "Changed to recommended BCEDIT configuration" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Firewall Policys with port 3389 (RDP)
+
+$FireWall = New-Object -comObject HNetCfg.FwPolicy2
+$EnableRules = $FireWall.rules | Where-Object {$_.LocalPorts -like "*3389*"}
+ForEach ($Rule In $EnableRules){
+    ($Rule.Enabled = "True")
+}
+
+Write-Host ($writeEmptyLine + "Changed all Firewall Policys with Port 3389 (RDP) to enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
