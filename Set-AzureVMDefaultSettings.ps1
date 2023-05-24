@@ -760,16 +760,26 @@ if ((get-partition -driveletter C).size -eq $MaxSize) {
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+## Cleanup Script Logs
+
+Write-Host ($writeEmptyLine + "# Cleanup Script Execution after reboot" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor1 $writeEmptyLine
+
+# Get-ChildItem -Recurse -Path C:\WindowsAzure\Logs\Plugins\Microsoft.Compute.CustomScriptExtension -Include CustomScriptHandler.log | Remove-Item
+# Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce
+
+Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name 'DeleteLogCustomScript' -Value 'c:\WINDOWS\system32\WindowsPowerShell\v1.0\powershell.exe -noprofile -sta -command "Get-ChildItem -Recurse -Path C:\WindowsAzure\Logs\Plugins\Microsoft.Compute.CustomScriptExtension -Include CustomScriptHandler.log | Remove-Item"'
+
+## ------------
+
+Stop-Transcript
+
+## ------------
+
 ## Restart server to apply all changes, five seconds after running the last command
 
 Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor1 $writeEmptyLine
-
-Write-Host ($writeEmptyLine + "# Cleanup Script Execution" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor1 $writeEmptyLine
-Get-ChildItem -Recurse -Path C:\WindowsAzure\Logs\Plugins\Microsoft.Compute.CustomScriptExtension -Include CustomScriptHandler.log | Remove-Item
-
-Stop-Transcript
 
 Start-Sleep -s 5
 Restart-Computer -ComputerName localhost
