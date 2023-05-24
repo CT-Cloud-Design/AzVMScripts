@@ -85,12 +85,12 @@ Param(
 
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$allowIcmpV4FirewallRuleName = "Allow_Ping_ICMPv4" # ICMPv4 Firewall Rule Name
-$allowIcmpV4FirewallRuleDisplayName = "Allow Ping ICMPv4" # ICMPv4 Firewall Rule Display Name
-$allowIcmpV4FirewallRuleDescription = "Packet Internet Groper ICMPv4"
-$allowIcmpV6FirewallRuleName = "Allow_Ping_ICMPv6" # ICMPv6 Firewall Rule Name
-$allowIcmpV6FirewallRuleDisplayName = "Allow Ping ICMPv6" # ICMPv6 Firewall Rule Display Name
-$allowIcmpV6FirewallRuleDescription = "Packet Internet Groper ICMPv6"
+$allowIcmpV4FirewallRuleName = "Allow_Ping1_ICMPv4" # ICMPv4 Firewall Rule Name
+$allowIcmpV4FirewallRuleDisplayName = "Allow Ping1 ICMPv4" # ICMPv4 Firewall Rule Display Name
+$allowIcmpV4FirewallRuleDescription = "Packet Internet1 ICMPv4"
+$allowIcmpV6FirewallRuleName = "Allow_Ping1_ICMPv6" # ICMPv6 Firewall Rule Name
+$allowIcmpV6FirewallRuleDisplayName = "Allow Ping1 ICMPv6" # ICMPv6 Firewall Rule Display Name
+$allowIcmpV6FirewallRuleDescription = "Packet Internet1 ICMPv6"
 $allowRdpDisplayName = "Remote Desktop*"
 $wmiFirewallRuleDisplayGroup = "Windows Management Instrumentation (WMI)"
 $remoteEventLogFirewallRuleDisplayGroup = "Remote Event Log Management"
@@ -104,7 +104,6 @@ $keyboardInputMethod = "0407:00000407" # German
 $tempFolder = "C:\Temp" # Temp folder name
 $installFolder = "C:\Install" # Install folder name
 $scriptsFolder = "C:\Scripts" # Install folder name
-$administratorName = $env:UserName
 
 $writeEmptyLine = "`n"
 $writeSeperatorSpaces = " - "
@@ -208,12 +207,13 @@ Import-Module NetSecurity
 # Enable firewall rule for RDP 
 try {
     Get-NetFirewallRule -DisplayName $allowRdpDisplayName -Enabled true -ErrorAction Stop | Out-Null
+    Write-Host ($writeEmptyLine + "# Remote Desktop was allready enabled" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor2 $writeEmptyLine 
 } catch {
     Set-NetFirewallRule -DisplayName $allowRdpDisplayName -Enabled true -PassThru | Out-Null
-}
-
-Write-Host ($writeEmptyLine + "# Remote Desktop enabled" + $writeSeperatorSpaces + $currentTime)`
+    Write-Host ($writeEmptyLine + "# Remote Desktop is now enabled" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine 
+}
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -359,7 +359,9 @@ Write-Host ($writeEmptyLine + "# Interactive Login set to - Do not display last 
 
 ## Set Folder Options
 
-$folderOptionsRegKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" # Per-User
+New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS
+
+$folderOptionsRegKeyPath = "HKU:\.Default\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" # Per Default User
 $folderOptionsHiddenRegKeyName = "Hidden"
 $folderOptionsHideFileExtRegKeyName = "HideFileExt" 
 $folderOptionsShowSuperHiddenRegKeyName = "ShowSuperHidden" 
@@ -367,8 +369,12 @@ $folderOptionsHideDrivesWithNoMediaRegKeyName = "HideDrivesWithNoMedia"
 $folderOptionsSeperateProcessRegKeyName = "SeperateProcess" 
 $folderOptionsAlwaysShowMenusRegKeyName = "AlwaysShowMenus" 
 
-Set-ItemProperty -Path $folderOptionsRegKeyPath -Name  $folderOptionsHiddenRegKeyName -Value 1 | Out-Null
-Set-ItemProperty -Path $folderOptionsRegKeyPath -Name  $folderOptionsHideFileExtRegKeyName -Value 0 | Out-Null
+if (!(test-path $folderOptionsRegKeyPath)) {
+    New-Item -Path $folderOptionsRegKeyPath
+}
+
+Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHiddenRegKeyName -Value 1 | Out-Null
+Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHideFileExtRegKeyName -Value 0 | Out-Null
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsShowSuperHiddenRegKeyName -Value 0 | Out-Null
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHideDrivesWithNoMediaRegKeyName -Value 0 | Out-Null
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsSeperateProcessRegKeyName -Value 1 | Out-Null
@@ -435,7 +441,9 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
 
 ## Remove description of the Local Administrator Account
 
-Set-LocalUser -Name $administratorName -Description ""
+#$administratorName = $env:UserName
+
+Set-LocalUser -Name aztmpadmin -Description ""
 
 Write-Host ($writeEmptyLine + "# Description removed from Local Administrator Account" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine
@@ -514,7 +522,7 @@ Write-Host ($writeEmptyLine + "Disable 'Installation and configuration of Networ
 -foregroundcolor $foregroundColor2 $writeEmptyLine
 ## --------
 
-Write-Host ($writeEmptyLine + "Wird für Application Guard benötigt" + $writeSeperatorSpaces + $currentTime)`
+Write-Host ($writeEmptyLine + "Needed by Application Guard" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Network Connections" /v NC_AllowNetBridge_NLA /t REG_DWORD /d 0 /f
 
