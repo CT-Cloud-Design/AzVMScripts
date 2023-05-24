@@ -91,7 +91,6 @@ $allowIcmpV4FirewallRuleDescription = "Packet Internet1 ICMPv4"
 $allowIcmpV6FirewallRuleName = "Allow_Ping1_ICMPv6" # ICMPv6 Firewall Rule Name
 $allowIcmpV6FirewallRuleDisplayName = "Allow Ping1 ICMPv6" # ICMPv6 Firewall Rule Display Name
 $allowIcmpV6FirewallRuleDescription = "Packet Internet1 ICMPv6"
-$allowRdpDisplayName = "Remote Desktop*"
 $wmiFirewallRuleDisplayGroup = "Windows Management Instrumentation (WMI)"
 $remoteEventLogFirewallRuleDisplayGroup = "Remote Event Log Management"
 $scheduledTaskNameServerManager = "ServerManager"
@@ -112,6 +111,14 @@ $foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Debug
+
+Write-Host ($writeEmptyLine + "# ENV-Username: $env:USERNAME" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor2 $writeEmptyLine
+
+Write-Host ($writeEmptyLine + "# ENV-Computername: $env:COMPUTERNAME" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## Create the folders, if it does not exist.
 
@@ -200,14 +207,18 @@ Write-Host ($writeEmptyLine + "# ICMP allowed trough Windows Firewall for IPv4 a
 
 ## Enable Remote Desktop (RDP) and enable Windows Firewall rule
 
+$allowRdpDisplayName = "Remote Desktop*"
+
 Import-Module NetSecurity
 (Get-WmiObject Win32_TerminalServiceSetting -Namespace root\cimv2\TerminalServices).SetAllowTsConnections(1,1) | Out-Null
 (Get-WmiObject -Class "Win32_TSGeneralSetting" -Namespace root\cimv2\TerminalServices -Filter "TerminalName='RDP-tcp'").SetUserAuthenticationRequired(0) | Out-Null
 
 # Enable firewall rule for RDP 
 try {
-    Get-NetFirewallRule -DisplayName $allowRdpDisplayName -Enabled true -ErrorAction Stop | Out-Null
-    Write-Host ($writeEmptyLine + "# Remote Desktop was allready enabled" + $writeSeperatorSpaces + $currentTime)`
+    Get-NetFirewallRule -DisplayName $allowRdpDisplayName | ForEach-Object {
+        Get-NetFirewallRule -Enabled True -ErrorAction Stop | Out-Null
+    }
+    Write-Host ($writeEmptyLine + "# Remote Desktop was already enabled" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine 
 } catch {
     Set-NetFirewallRule -DisplayName $allowRdpDisplayName -Enabled true -PassThru | Out-Null
@@ -476,12 +487,20 @@ Write-Host ($writeEmptyLine + "# Automount Disabled" + $writeSeperatorSpaces + $
 ## IPv4 before IPv6
 
 $ipv4v6RegKeyPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"
-$ipv4v6RegKeyName = "DisabledComponents "
-
-New-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName -PropertyType DWORD -Value "0x20" | Out-Null
+$ipv4v6RegKeyName = "DisabledComponents"
 
 Write-Host ($writeEmptyLine + "# IPv4 before IPv6 changed" + $writeSeperatorSpaces + $currentTime)`
 -foregroundcolor $foregroundColor2 $writeEmptyLine
+
+try {
+    Get-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName  | Out-Null
+    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 was allready enabled" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor2 $writeEmptyLine 
+} catch {
+    New-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName -PropertyType DWORD -Value "0x20" | Out-Null
+    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 is now enabled" + $writeSeperatorSpaces + $currentTime)`
+-foregroundcolor $foregroundColor2 $writeEmptyLine 
+}
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -636,7 +655,7 @@ reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v UserA
 ### !Attention only use when necessary 
     ### --------
 
-Write-Host "Enable 'Microsoft network client: Digitally sign communications (always)'"
+#    Write-Host "Enable 'Microsoft network client: Digitally sign communications (always)'"
 #    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v RequireSecuritySignature /t REG_DWORD /d 1 /f
 
     #Write-Host "Set LAN Manager authentication level to 'Send NTLMv2 response only. Refuse LM & NTLM'"
