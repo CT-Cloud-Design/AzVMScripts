@@ -287,7 +287,8 @@ $adminIESecurityRegKeyName = "IsInstalled"
 Set-ItemProperty -Path $adminIESecurityRegKeyPath -Name $adminIESecurityRegKeyName -Value 0 | Out-Null
 
 # Stop and start Windows explorer process
-if (Get-Process $windowsExplorerProcessName) {
+if ($env:USERNAME -ne "$env:COMPUTERNAME") {
+    # Stop and start Windows explorer process
     Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
 }
 
@@ -361,9 +362,13 @@ Write-Host ($writeEmptyLine + "# Interactive Login set to - Do not display last 
 
 ## Set Folder Options
 
-New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS
+$folderOptionsRegKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" # Per Default User 
 
-$folderOptionsRegKeyPath = "HKU:\.Default\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" # Per Default User
+if ($env:USERNAME -eq "$env:COMPUTERNAME") {
+    reg load HKLM\DefaultUser C:\Users\Default\NTUSER.DAT
+    $folderOptionsRegKeyPath = "HKLM:\Defaultuser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+}
+
 $folderOptionsHiddenRegKeyName = "Hidden"
 $folderOptionsHideFileExtRegKeyName = "HideFileExt" 
 $folderOptionsShowSuperHiddenRegKeyName = "ShowSuperHidden" 
@@ -382,8 +387,10 @@ Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHideDrivesWi
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsSeperateProcessRegKeyName -Value 1 | Out-Null
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsAlwaysShowMenusRegKeyName -Value 1 | Out-Null
 
-# Stop and start Windows explorer process
-if (Get-Process $windowsExplorerProcessName) {
+if ($env:USERNAME -eq "$env:COMPUTERNAME") {
+    reg unload HKLM\DefaultUser
+} else {
+    # Stop and start Windows explorer process
     Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
 }
 
