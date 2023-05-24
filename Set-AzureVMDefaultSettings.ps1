@@ -87,6 +87,8 @@ Param(
 
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$secCurrentContext = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$isSystem = ($secCurrentContext -like "*SYSTEM")
 $allowIcmpV4FirewallRuleName = "Allow_Ping1_ICMPv4" # ICMPv4 Firewall Rule Name
 $allowIcmpV4FirewallRuleDisplayName = "Allow Ping1 ICMPv4" # ICMPv4 Firewall Rule Display Name
 $allowIcmpV4FirewallRuleDescription = "Packet Internet1 ICMPv4"
@@ -112,7 +114,7 @@ $global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action 
 $foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
 
-Set-Content -Encoding UTF8 -Path "c:\temp\test.txt" -Value "" 
+Set-Content -Encoding UTF8 -Path "c:\temp\AzureVMDefaultSettingsResult.txt" -Value "" 
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -132,7 +134,7 @@ function Add-Result {
         if ($ok) { $newText += "X|" } else { $newText += " |"} 
         if ($failed) { $newText += "X]" } else { $newText += " ]"}
         $newText += " " + $description  
-        Add-Content -Encoding UTF8 -Path "c:\temp\test.txt" -Value $newText 
+        Add-Content -Encoding UTF8 -Path "c:\temp\AzureVMDefaultSettingsResult.txt" -Value $newText 
     }    
     end {
     }
@@ -182,7 +184,7 @@ Start-Transcript -OutputDirectory "C:\Temp\"
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Debug
-$secCurrentContext = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+
 Write-Host ($writeEmptyLine + "# ENV-Username: $env:USERNAME" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 Write-Host ($writeEmptyLine + "# secCurrentContext: $secCurrentContext" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 Write-Host ($writeEmptyLine + "# ENV-Computername: $env:COMPUTERNAME" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
@@ -327,7 +329,7 @@ Set-ItemProperty -Path $adminIESecurityRegKeyPath -Name $adminIESecurityRegKeyNa
 Add-Result -description "# IE Enhanced Security Configuration for the Administrator disabled" -ok -changed
 
 # Stop and start Windows explorer process
-if ($env:USERNAME -ne "$env:COMPUTERNAME") {
+if (!$isSystem) {
     # Stop and start Windows explorer process
     Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
 }
@@ -404,7 +406,7 @@ Write-Host ($writeEmptyLine + "# Interactive Login set to - Do not display last 
 
 $folderOptionsRegKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" # Per Default User 
 
-if ($env:USERNAME -eq "$env:COMPUTERNAME") {
+if ($isSystem) {
     reg load HKLM\DefaultUser C:\Users\Default\NTUSER.DAT
     $folderOptionsRegKeyPath = "HKLM:\Defaultuser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
 }
@@ -427,7 +429,7 @@ Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsHideDrivesWi
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsSeperateProcessRegKeyName -Value 1 | Out-Null
 Set-ItemProperty -Path $folderOptionsRegKeyPath -Name $folderOptionsAlwaysShowMenusRegKeyName -Value 1 | Out-Null
 
-if ($env:USERNAME -eq "$env:COMPUTERNAME") {
+if ($isSystem) {
     reg unload HKLM\DefaultUser
 } else {
     # Stop and start Windows explorer process
@@ -495,8 +497,6 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Remove description of the Local Administrator Account
-
-#$administratorName = $env:UserName
 
 Set-LocalUser -Name aztmpadmin -Description ""
 
