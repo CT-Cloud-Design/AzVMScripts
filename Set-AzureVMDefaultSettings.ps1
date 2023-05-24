@@ -55,6 +55,8 @@ Set user authentication for remote connections by using Network Level Authentica
 Create new local Admin without sid500
 Automatic Download ADConnect (Switch)
 Install Domain-Controller Tools on Domain Controller (Switch)
+BCEDIT
+Firewall Policys with port 3389 (RDP)
 
 Restart the server to apply all changes, five seconds after running the last command.
 
@@ -112,26 +114,16 @@ $foregroundColor2 = "Yellow"
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Debug
-
-Write-Host ($writeEmptyLine + "# ENV-Username: $env:USERNAME" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
-
-Write-Host ($writeEmptyLine + "# ENV-Computername: $env:COMPUTERNAME" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
-
 ## Create the folders, if it does not exist.
 
 if (!(test-path $tempFolder))
 {
     New-Item -ItemType Directory -Path $tempFolder -Force | Out-Null
 
-    Write-Host ($writeEmptyLine + "# $tempFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $tempFolder folder created" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 else {
-    Write-Host ($writeEmptyLine + "# $tempFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $tempFolder folder exists" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 ## ------------
@@ -140,12 +132,10 @@ if (!(test-path $installFolder))
 {
     New-Item -ItemType Directory -Path $installFolder -Force | Out-Null
 
-    Write-Host ($writeEmptyLine + "# $installFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $installFolder folder created" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 else {
-    Write-Host ($writeEmptyLine + "# $installFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $installFolder folder exists" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 ## ------------
@@ -154,15 +144,21 @@ if (!(test-path $scriptsFolder))
 {
     New-Item -ItemType Directory -Path $scriptsFolder -Force | Out-Null
 
-    Write-Host ($writeEmptyLine + "# $scriptsFolder folder created" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $scriptsFolder folder created" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 else {
-    Write-Host ($writeEmptyLine + "# $scriptsFolder folder exists" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# $scriptsFolder folder exists" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 Start-Transcript -OutputDirectory "C:\Temp\"
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Debug
+
+Write-Host ($writeEmptyLine + "# ENV-Username: $env:USERNAME" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
+
+Write-Host ($writeEmptyLine + "# ENV-Computername: $env:COMPUTERNAME" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -170,14 +166,12 @@ Start-Transcript -OutputDirectory "C:\Temp\"
 
 if ($isAdministrator -eq $false) {
         # Check if running as Administrator, otherwise exit the script
-        Write-Host ($writeEmptyLine + "# Please run PowerShell as Administrator" + $writeSeperatorSpaces + $global:currenttime)`
-        -foregroundcolor $foregroundColor1 $writeEmptyLine
+        Write-Host ($writeEmptyLine + "# Please run PowerShell as Administrator" + $writeSeperatorSpaces + $global:currenttime) -foregroundcolor $foregroundColor2 $writeEmptyLine
         Start-Sleep -s 3
         exit
 } else {
         # If running as Administrator, start script execution    
-        Write-Host ($writeEmptyLine + "# Script started. Without any errors, it will need around 2 minutes to complete" + $writeSeperatorSpaces + $currentTime)`
-        -foregroundcolor $foregroundColor1 $writeEmptyLine 
+        Write-Host ($writeEmptyLine + "# Script started. Without any errors, it will need around 2 minutes to complete" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine 
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -200,8 +194,7 @@ try {
     -Enabled True -Profile Any -Action Allow | Out-Null
 }
 
-Write-Host ($writeEmptyLine + "# ICMP allowed trough Windows Firewall for IPv4 and IPv6" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# ICMP allowed trough Windows Firewall for IPv4 and IPv6" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -218,12 +211,10 @@ try {
     Get-NetFirewallRule -DisplayName $allowRdpDisplayName | ForEach-Object {
         Get-NetFirewallRule -Enabled True -ErrorAction Stop | Out-Null
     }
-    Write-Host ($writeEmptyLine + "# Remote Desktop was already enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine 
+    Write-Host ($writeEmptyLine + "# Remote Desktop was already enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 } catch {
     Set-NetFirewallRule -DisplayName $allowRdpDisplayName -Enabled true -PassThru | Out-Null
-    Write-Host ($writeEmptyLine + "# Remote Desktop is now enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine 
+    Write-Host ($writeEmptyLine + "# Remote Desktop is now enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -235,8 +226,7 @@ $rdpRegKeyName = "UserAuthentication"
 
 Set-ItemProperty -Path $rdpRegKeyPath -name $rdpRegKeyName -Value 1 | Out-Null
 
-Write-Host ($writeEmptyLine + "# Secure RDP authentication Network Level Authentication enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Secure RDP authentication Network Level Authentication enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -261,8 +251,7 @@ try {
     Set-NetFirewallRule -DisplayGroup $remoteEventLogFirewallRuleDisplayGroup -Enabled true -PassThru | Out-Null
 }
 
-Write-Host ($writeEmptyLine + "# Remote Management enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Remote Management enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -273,8 +262,7 @@ $uacRegKeyName = "EnableLUA"
 
 Set-ItemProperty -Path $uacRegKeyPath -Name $uacRegKeyName -Value 1 -Type DWord | Out-Null
 
- Write-Host ($writeEmptyLine + "# User Access Control (UAC) enabled" + $writeSeperatorSpaces + $currentTime)`
- -foregroundcolor $foregroundColor2 $writeEmptyLine
+ Write-Host ($writeEmptyLine + "# User Access Control (UAC) enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
  
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -285,8 +273,7 @@ $rdpPrinterMappingRegKeyName = "fDisableCpm"
 
 Set-ItemProperty -Path $rdpPrinterMappingRegKeyPath -Name $rdpPrinterMappingRegKeyName -Value 1 | Out-Null
 
-Write-Host ($writeEmptyLine + "# RDP printer mapping disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# RDP printer mapping disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -303,8 +290,7 @@ if ($env:USERNAME -ne "$env:COMPUTERNAME") {
     Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
 }
 
-Write-Host ($writeEmptyLine + "# IE Enhanced Security Configuration for the Administrator disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# IE Enhanced Security Configuration for the Administrator disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -315,8 +301,7 @@ $wacPopPupKeyName = "DoNotPopWACConsoleAtSMLaunch"
 
 Set-ItemProperty -Path $serverManagerRegKeyPath -Name $wacPopPupKeyName -Value 1 | Out-Null
 
-Write-Host ($writeEmptyLine + "# Windows Admin Center pop-up is disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Windows Admin Center pop-up is disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -324,8 +309,7 @@ Write-Host ($writeEmptyLine + "# Windows Admin Center pop-up is disabled" + $wri
 
 Get-ScheduledTask -TaskName $scheduledTaskNameServerManager | Disable-ScheduledTask | Out-Null
 
-Write-Host ($writeEmptyLine + "# Server Manager disabled at startup" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Server Manager disabled at startup" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -333,8 +317,7 @@ Write-Host ($writeEmptyLine + "# Server Manager disabled at startup" + $writeSep
 
 net user guest /active:no | Out-Null
 
-Write-Host ($writeEmptyLine + "# Guest account disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Guest account disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -342,8 +325,7 @@ Write-Host ($writeEmptyLine + "# Guest account disabled" + $writeSeperatorSpaces
 
 powercfg.exe /h off
 
-Write-Host ($writeEmptyLine + "# Hibernation disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Hibernation disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -354,8 +336,7 @@ $windowsDiagnosticLevelRegKeyName = "AllowTelemetry"
 
 New-ItemProperty -Path $windowsDiagnosticLevelRegKeyPath -Name $windowsDiagnosticLevelRegKeyName -PropertyType "DWord" -Value 0 -Force | Out-Null
 
-Write-Host ($writeEmptyLine + "# Windows Diagnostic level (Telemetry) set to Security" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Windows Diagnostic level (Telemetry) set to Security" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -366,8 +347,7 @@ $interActiveLogonRegKeyName = "DontDisplayLastUsername"
 
 Set-ItemProperty -Path $interActiveLogonRegKeyPath -Name $interActiveLogonRegKeyName -Value 1 | Out-Null
 
-Write-Host ($writeEmptyLine + "# Interactive Login set to - Do not display last user name" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Interactive Login set to - Do not display last user name" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -405,8 +385,7 @@ if ($env:USERNAME -eq "$env:COMPUTERNAME") {
     Stop-Process -processname $windowsExplorerProcessName -Force | Out-Null
 }
 
-Write-Host ($writeEmptyLine + "# Folder Options set" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Folder Options set" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -416,8 +395,7 @@ $drive = Get-WmiObject win32_volume -Filter "DriveLetter = 'C:'"
 $drive.Label = $cDriveLabel
 $drive.put() | Out-Null
 
-Write-Host ($writeEmptyLine + "# Volumelabel of C: set to $cDriveLabel" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Volumelabel of C: set to $cDriveLabel" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -425,8 +403,7 @@ Write-Host ($writeEmptyLine + "# Volumelabel of C: set to $cDriveLabel" + $write
 
 Set-TimeZone -Name $timezone
 
-Write-Host ($writeEmptyLine + "# Timezone set to $timezone" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Timezone set to $timezone" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -436,11 +413,9 @@ try {
     $highPerf = powercfg -l | ForEach-Object {if($_.contains($powerManagement)) {$_.split()[3]}}
     $currPlan = $(powercfg -getactivescheme).split()[3]
     if ($currPlan -ne $highPerf) {powercfg -setactive $highPerf}
-    Write-Host ($writeEmptyLine + "# Power Management set to $powerManagement" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor2 $writeEmptyLine
+    Write-Host ($writeEmptyLine + "# Power Management set to $powerManagement" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 } catch {
-    Write-Warning -Message ($writeEmptyLine + "# Unable to set power plan to $powerManagement" + $writeSeperatorSpaces + $currentTime)`
-    -foregroundcolor $foregroundColor1 $writeEmptyLine
+    Write-Warning -Message ($writeEmptyLine + "# Unable to set power plan to $powerManagement" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor1 $writeEmptyLine
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -452,11 +427,9 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
         $langList[0].InputMethodTips.Clear()
         $langList[0].InputMethodTips.Add($keyboardInputMethod) 
         Set-WinUserLanguageList $langList -Force
-        Write-Host ($writeEmptyLine + "# Keybord set to German" + $writeSeperatorSpaces + $currentTime)`
-        -foregroundcolor $foregroundColor2 $writeEmptyLine
+        Write-Host ($writeEmptyLine + "# Keybord set to German" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 } else {
-	    Write-Host ($writeEmptyLine + "# Keybord all ready set to German" + $writeSeperatorSpaces + $currentTime)`
-        -foregroundcolor $foregroundColor2 $writeEmptyLine
+	    Write-Host ($writeEmptyLine + "# Keybord all ready set to German" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -467,8 +440,7 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
 
 Set-LocalUser -Name aztmpadmin -Description ""
 
-Write-Host ($writeEmptyLine + "# Description removed from Local Administrator Account" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Description removed from Local Administrator Account" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -479,8 +451,7 @@ $automountRegKeyName = "NoAutoMount"
 
 Set-ItemProperty -Path $automountRegKeyPath -name $automountRegKeyName -Value 1 | Out-Null
 
-Write-Host ($writeEmptyLine + "# Automount Disabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Automount Disabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -489,167 +460,139 @@ Write-Host ($writeEmptyLine + "# Automount Disabled" + $writeSeperatorSpaces + $
 $ipv4v6RegKeyPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"
 $ipv4v6RegKeyName = "DisabledComponents"
 
-Write-Host ($writeEmptyLine + "# IPv4 before IPv6 changed" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# IPv4 before IPv6 changed" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 
 try {
     Get-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName  | Out-Null
-    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 was allready enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine 
+    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 was allready enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 } catch {
     New-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName -PropertyType DWORD -Value "0x20" | Out-Null
-    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 is now enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine 
+    Write-Host ($writeEmptyLine + "# IPv4 before IPv6 is now enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Hardening
 
-Write-Host ($writeEmptyLine + "Set controlled folder access to audit mode" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Set controlled folder access to audit mode" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\Controlled Folder Access" /v EnableControlledFolderAccess /t REG_DWORD /d "2" /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Enable 'Local Security Authority (LSA) protection'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Enable 'Local Security Authority (LSA) protection'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v RunAsPPL /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Enumerate administrator accounts on elevation'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Enumerate administrator accounts on elevation'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" /v EnumerateAdministrators /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" /v DisableNotifications /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfiles" /v DisableNotifications /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile" /v DisableNotifications /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Enable 'Apply UAC restrictions to local accounts on network logons'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Enable 'Apply UAC restrictions to local accounts on network logons'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Installation and configuration of Network Bridge on your DNS domain network'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Installation and configuration of Network Bridge on your DNS domain network'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 ## --------
 
-Write-Host ($writeEmptyLine + "Needed by Application Guard" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Needed by Application Guard" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Network Connections" /v NC_AllowNetBridge_NLA /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Enable 'Require domain users to elevate when setting a network's location'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Enable 'Require domain users to elevate when setting a network's location'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Network Connections" /v NC_StdDomainUserSetLocation /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Prohibit use of Internet Connection Sharing on your DNS domain network" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Prohibit use of Internet Connection Sharing on your DNS domain network" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Network Connections" /v NC_ShowSharedAccessUI /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Always install with elevated privileges'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Always install with elevated privileges'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Autoplay for non-volume devices'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Autoplay for non-volume devices'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer\" /v NoAutoplayfornonVolume /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Autoplay' for all drives" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Autoplay' for all drives" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer\" /v NoDriveTypeAutoRun /t REG_DWORD /d 255 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer\" /v NoAutorun /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Allow Basic authentication' for WinRM Client" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Allow Basic authentication' for WinRM Client" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" /v AllowBasic /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable 'Allow Basic authentication' for WinRM Service" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable 'Allow Basic authentication' for WinRM Service" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service\" /v AllowBasic /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable running or installing downloaded software with invalid signature" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable running or installing downloaded software with invalid signature" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Internet Explorer\Download" /v RunInvalidSignatures /t REG_DWORD /d 0 /f
 
 ## --------
 
-#Write-Host ($writeEmptyLine + "Set IPv6 source routing to highest protection" + $writeSeperatorSpaces + $currentTime)`
-#-foregroundcolor $foregroundColor2 $writeEmptyLine
+#Write-Host ($writeEmptyLine + "Set IPv6 source routing to highest protection" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 #reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" /v DisableIPSourceRouting /t REG_DWORD /d 2 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable IP source routing" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable IP source routing" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v DisableIPSourceRouting /t REG_DWORD /d 2 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Block outdated ActiveX controls for Internet Explorer" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Block outdated ActiveX controls for Internet Explorer" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Ext" /v VersionCheckEnabled /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable Solicited Remote Assistance" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable Solicited Remote Assistance" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v fAllowToGetHelp /t REG_DWORD /d 0 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Disable Anonymous enumeration of shares" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Disable Anonymous enumeration of shares" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v RestrictAnonymous /t REG_DWORD /d 1 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Set 'Remote Desktop security level' to 'TLS'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Set 'Remote Desktop security level' to 'TLS'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SecurityLayer /t REG_DWORD /d 2 /f
 
 ## --------
 
-Write-Host ($writeEmptyLine + "Set user authentication for remote connections by using Network Level Authentication to 'Enabled'" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "Set user authentication for remote connections by using Network Level Authentication to 'Enabled'" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v UserAuthentication /t REG_DWORD /d 1 /f
 
 ### !Attention only use when necessary 
@@ -680,12 +623,10 @@ reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v UserA
 
 ## ASR-Rules
 
-Write-Host ($writeEmptyLine + "ASR Rules AuditMode" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "ASR Rules AuditMode" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 #Add-MpPreference -AttackSurfaceReductionRules_Ids 01443614-CD74-433A-B99E-2ECDC07BFC25 -AttackSurfaceReductionRules_Actions AuditMode
 
-Write-Host ($writeEmptyLine + "ASR Rules enabled" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor2 $writeEmptyLine
+Write-Host ($writeEmptyLine + "ASR Rules enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
 Add-MpPreference -AttackSurfaceReductionRules_Ids 56a863a9-875e-4185-98a7-b882c64b5ce5 -AttackSurfaceReductionRules_Actions Enabled
 Add-MpPreference -AttackSurfaceReductionRules_Ids BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550 -AttackSurfaceReductionRules_Actions Enabled
 Add-MpPreference -AttackSurfaceReductionRules_Ids D4F940AB-401B-4EfC-AADC-AD5F3C50688A -AttackSurfaceReductionRules_Actions Enabled
@@ -819,8 +760,7 @@ Write-Host ($writeEmptyLine + "Changed all Firewall Policys with Port 3389 (RDP)
 
 ## Cleanup Script Logs
 
-Write-Host ($writeEmptyLine + "# Cleanup Script Execution after reboot" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor1 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# Cleanup Script Execution after reboot" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor1 $writeEmptyLine
 
 # Get-ChildItem -Recurse -Path C:\WindowsAzure\Logs\Plugins\Microsoft.Compute.CustomScriptExtension -Include CustomScriptHandler.log | Remove-Item
 # Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce
@@ -835,8 +775,7 @@ Stop-Transcript
 
 ## Restart server to apply all changes, five seconds after running the last command
 
-Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" + $writeSeperatorSpaces + $currentTime)`
--foregroundcolor $foregroundColor1 $writeEmptyLine
+Write-Host ($writeEmptyLine + "# This server will restart to apply all changes" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor1 $writeEmptyLine
 
 Start-Sleep -s 5
 Restart-Computer -ComputerName localhost
