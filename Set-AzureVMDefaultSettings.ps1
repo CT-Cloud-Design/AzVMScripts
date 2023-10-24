@@ -61,19 +61,27 @@
         Download AD-Connect Health Agent
     BCEDIT
     Firewall Policys with port 3389 (RDP)
+    Set Pagefile to RamSize at B?S Azure VMs
 
     Restart the server to apply all changes, five seconds after running the last command.
 
     #Add later:
-        exception for all registry keys
-        guest + gast abfragen
+        ASR Action IDs prüfen == 1 indexof() -> ASR only possible without Temperprotection, try Intune or GPO intead.
+        
 
 .NOTES
     Disclaimer:     This script is provided "As Is" with no warranties.
 	NAME: \Set-AzureVMDefaultSettings.ps1
-	VERSION: 1.01
+	VERSION: 1.03
 	AUTHOR: Ralf Bönisch - Cloud Design
     MAIL: rboenisch@cloud-design.de
+
+    1.03:
+    Add Domain Controller check for LSA
+
+    1.02:
+    Removed DisableNotifications ... Windows Firewall Bug ... Firewall Service invalid Data.
+    Fixed bug with ASR enumeration when action and ids are empty.
 .EXAMPLE
 .\Set-AzureVMDefaultSettings.ps1
 .\Set-AzureVMDefaultSettings.ps1 -AdminUsername "azadmin" -AdminPassword "password"
@@ -106,7 +114,7 @@ Param(
 $writeEmptyLine = "`n"
 $writeSeperatorSpaces = " - "
 $global:currenttime = Set-PSBreakpoint -Variable currenttime -Mode Read -Action {$global:currenttime= Get-Date -UFormat "%A %m/%d/%Y %R"}
-$foregroundColor1 = "Red"
+#$foregroundColor1 = "Red"
 $foregroundColor2 = "Yellow"
 
 function Add-Result {
@@ -145,14 +153,15 @@ function Set-RegistryDword {
         if ((Get-ItemPropertyValue -Path $regPath -name $regKey -ErrorAction Stop) -ne $regValue) { throw "exception" }
         Add-Result -description $wasAllreadySetString -ok
     } catch {
-        Set-ItemProperty -Path $regPath -name $regKey -Value $regValue | Out-Null
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null}
+        Set-ItemProperty -Path $regPath -name $regKey -Type DWord -Value $regValue | Out-Null
         Add-Result -description $setString -ok -changed
     }
 }
 
 function Get-isAzureVM () {
     try {
-        $metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
+        $global:metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
         Write-Host "azEnvironment: " $metadata.compute.azEnvironment
         Add-Result -description "azEnvironment: $($metadata.compute.azEnvironment)" -ok
         Write-Host "location: " $metadata.compute.location
@@ -178,13 +187,248 @@ function Get-isAzureVM () {
         [string] $text
     )
     
-    $ids = (Get-MpPreference).AttackSurfaceReductionRules_Ids
-    if ($ids.contains($id)) {
-        Add-Result -description "$text was allready set" -ok
+    $ids = $global:mpPref.AttackSurfaceReductionRules_Ids
+    $ids = [Collections.Generic.List[Object]]$ids
+    $asrRulesAction = $global:mpPref.AttackSurfaceReductionRules_Actions
+    
+    if ($null -eq $asrRulesAction) {
+        Add-MpPreference -AttackSurfaceReductionRules_Ids $id -AttackSurfaceReductionRules_Actions Enabled
+        Add-Result -description "$text is now enabled" -ok -changed
+        $global:mpPref = Get-MpPreference
+        return
+    }
+    
+    $position = $ids.FindIndex( {$args[0] -eq $id} )
+
+    if ($position -ne -1) {
+        if ($asrRulesAction[$position] = 1) {
+            Add-Result -description "$text was already set to enabled" -ok
+        } elseif ($asrRulesAction[$position] = 2) {
+            Add-MpPreference -AttackSurfaceReductionRules_Ids $id -AttackSurfaceReductionRules_Actions Enabled
+            Add-Result -description "$text was set audit and is now enabled" -ok -changed
+        } elseif ($asrRulesAction[$position] = 0) {
+            Add-MpPreference -AttackSurfaceReductionRules_Ids $id -AttackSurfaceReductionRules_Actions Enabled
+            Add-Result -description "$text was set disabled and is now enabled" -ok -changed
+        } else {
+            Add-MpPreference -AttackSurfaceReductionRules_Ids $id -AttackSurfaceReductionRules_Actions Enabled
+            Add-Result -description "$text is now enabled" -ok -changed
+        }
     } else {
         Add-MpPreference -AttackSurfaceReductionRules_Ids $id -AttackSurfaceReductionRules_Actions Enabled
         Add-Result -description "$text" -ok -changed
     }
+}
+
+function Get-PageFile {
+    <# 
+     .SYNOPSIS
+      List the drives that have page file(s) and their configuration 
+    
+     .DESCRIPTION
+      List the drives that have page file(s) and their configuration 
+      Note that 0 value for Initial or Maximum size indicate a system-managed page file
+      This function does not require or accept any parameters
+    
+     .OUTPUTS 
+      This function returns a PS object for each drive that has a page file on it,
+      each having the following 3 properties/example:
+        DriveLetter InitialSizeMB MaximumSizeMB
+        ----------- ------------- -------------
+                  C             0             0
+                  D          1024          4096
+    
+    #>
+    
+        [CmdletBinding(ConfirmImpact='Low')] 
+        Param()
+    
+        Begin { }
+    
+        Process {
+            Get-WmiObject -Class Win32_PageFileSetting | 
+                Select-Object  @{n='DriveLetter';  e={$_.Name[0]}},
+                        @{n='InitialSizeMB';e={$_.InitialSize}},
+                        @{n='MaximumSizeMB';e={$_.MaximumSize}}
+            Write-Verbose '0 value for Initial or Maximum size indicate a system-managed page file'
+        }
+    
+        End { }
+}
+
+function Set-PageFile {
+    <# 
+     .SYNOPSIS
+      Function to set page file to be on a given drive 
+    
+     .DESCRIPTION
+      Function to set page file to be on a given drive  
+      Function will create page file if it does not exist on the provided drive
+    
+     .PARAMETER PageFile
+      This is a PS Custom Object containing the following 3 properties:
+        DriveLetter such as c
+        InitialSizeMB such as 1024 (0 value indicate system managed page file)
+        MaximumSizeMB such as 4096 (0 value indicate system managed page file)
+      This object can be constructed manually as in:
+      $PageFile = [PSCustomObject]@{
+        DriveLetter   = 'c'
+        InitialSizeMB = 0 
+        MaximumSizeMB = 0 
+      }
+      or obtained from the Get-PageFile function of this PS module
+    
+     .EXAMPLE
+      Set-PageFile -PageFile ([PSCustomObject]@{
+        DriveLetter   = 'c'
+        InitialSizeMB = 0 
+        MaximumSizeMB = 0 
+      })
+      This example configures a system-managed page file on drive c
+    
+     .EXAMPLE
+      Get-PageFile | ForEach-Object { $_.InitialSizeMB = 0; $_.MaximumSizeMB = 0; $_ } | Set-PageFile
+      This example sets every page file to system-managed size
+    
+    #>
+
+
+    [CmdletBinding(ConfirmImpact='Low')] 
+    Param(
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)][PSCustomObject]$PageFile = [PSCustomObject]@{
+            DriveLetter   = ((Get-WmiObject Win32_Volume | ForEach-Object PageFilePresent).DriveLetter | ForEach-Object { $_[0] } | Select-Object -First 1)
+            InitialSizeMB = 0 # 0 = System Managed Size
+            MaximumSizeMB = 0 # 0 = System Managed Size
+        }
+    )
+
+    Begin { 
+        Write-Verbose 'Input received:'
+        Write-Verbose ($PageFile | Out-String)
+        
+        $DriveletterList = (Get-WmiObject Win32_Volume | Where-Object PageFilePresent).DriveLetter | ForEach-Object { $_[0] } 
+        if ($PageFile.DriveLetter -notin $DriveletterList) {
+            Write-Log 'Set-PageFile error:','Provided drive letter',$PageFile.DriveLetter,
+                'does not exist on this computer, available drive letters are',($DriveletterList -join ', ') Magenta,Yellow,Magenta,Yellow,Magenta 
+            break
+        } else {
+            Write-Verbose "Validated that provided drive letter '$($PageFile.DriveLetter)' exists on this computer '$($env:COMPUTERNAME)'"
+        }
+    }
+
+    Process {
+
+        $CurrentPageFile = Get-PageFile | Where-Object { $_.DriveLetter -match $PageFile.DriveLetter }
+        if ($CurrentPageFile.InitialSizeMB -eq $PageFile.InitialSizeMB -and $CurrentPageFile.MaximumSizeMB -eq $PageFile.MaximumSizeMB) {
+            Write-Log 'Existing page file',($CurrentPageFile | Out-String),'already matches provided parameters' Green,Yellow,Green
+        } else {
+            Write-Log 'Updating page file',($CurrentPageFile | Out-String) Green,Cyan
+
+            #region Disable AutomaticManagedPagefile feature
+            $compObj = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
+            if ($compObj.AutomaticManagedPagefile) {
+                $compObj.AutomaticManagedPagefile = $false
+                $compObj.Put() | Out-Null
+                $compObj = Get-WmiObject -Class Win32_compObj -EnableAllPrivileges
+                if ($compObj.AutomaticManagedPagefile) { 
+                    Write-Log 'Set-PageFile:','Unable to Disable AutomaticManagedPagefile feature','Get-WmiObject -Class Win32_compObj' Magenta,Yellow,Magenta
+                    break
+                } else {
+                    Write-Log 'Disabled','AutomaticManagedPagefile','feature on',$compObj.Name Green,Cyan,Green,Cyan
+                }
+            } else {
+                Write-Log 'Computer',$compObj.Name,'AutomaticManagedPagefile','feature is already disabled' Green,Cyan,Green,Cyan
+            }
+            #endregion
+
+            # Change/Create Page File
+            $pageFileSetting = Get-WmiObject -Class Win32_PageFileSetting | Where-Object { $_.Name.StartsWith($PageFile.DriveLetter) }
+            if (-not $pageFileSetting) {
+                Set-WmiInstance -Class Win32_PageFileSetting -Arguments @{
+                    Name        = "$($PageFile.DriveLetter):\pagefile.sys"
+                    InitialSize = 0
+                    MaximumSize = 0
+                } -EnableAllPrivileges | Out-Null
+                $pageFileSetting = Get-WmiObject -Class Win32_PageFileSetting | Where-Object { $_.Name.StartsWith($PageFile.DriveLetter) }
+            }
+            $pageFileSetting.InitialSize = $PageFile.InitialSizeMB
+            $pageFileSetting.MaximumSize = $PageFile.MaximumSizeMB
+            $pageFileSetting.Put() | Out-Null
+            $CurrentPageFile = Get-PageFile | Where-Object { $_.DriveLetter -match $PageFile.DriveLetter }
+            Write-Verbose 'PageFile setting:'
+            Write-Verbose ($PageFile | Out-String)
+            Write-Verbose 'CurrentPageFile setting:'
+            Write-Verbose ($CurrentPageFile | Out-String)
+            if ($CurrentPageFile.InitialSizeMB -eq $PageFile.InitialSizeMB -and $CurrentPageFile.MaximumSizeMB -eq $PageFile.MaximumSizeMB) {
+                Write-Log 'Successfully updated page file settings to',($CurrentPageFile | Out-String) Green,Cyan
+                Write-Log 'Remember that a reboot is required to complete this process' Yellow
+            } else {
+                Write-log 'Unable to change Page File setting',($CurrentPageFile | Out-String) Magenta,Yellow
+            }
+        }
+
+    }
+
+    End { }
+
+}
+
+function Remove-PageFile {
+<# 
+ .SYNOPSIS
+  Function to remove page file from a given drive 
+
+ .DESCRIPTION
+  Function to remove page file from a given drive
+
+ .PARAMETER DriveLetter
+  Drive such as 'c' or 'e' that has a page file to be removed
+
+ .EXAMPLE
+  Remove-PageFile 'c'
+
+ .LINK
+  https://superwidgets.wordpress.com/category/powershell/
+
+ .NOTES
+  Function by Sam Boutros
+  20 September 2018 - v0.1
+
+#>
+
+    [CmdletBinding(ConfirmImpact='Low')] 
+    Param(
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+            [String]$DriveLetter = ((Get-WmiObject Win32_Volume | Where-Object PageFilePresent).DriveLetter | ForEach-Object { $_[0] } | Select-Object -First 1)
+    )
+
+    Begin { 
+        Write-Verbose "Input received: DriveLetter $DriveLetter"
+        
+        $DriveletterList = (Get-WmiObject Win32_Volume | Where-Object PageFilePresent).DriveLetter | ForEach-Object { $_[0] } 
+        if ($DriveLetter -notin $DriveletterList) {
+            Write-Log 'Remove-PageFile error:','Provided drive letter',$DriveLetter,
+                'does not exist on this computer, available drive letters are',($DriveletterList -join ', ') Magenta,Yellow,Magenta,Yellow,Magenta 
+            break
+        } else {
+            Write-Verbose "Validated that provided drive letter '$($DriveLetter)' exists on this computer '$($env:COMPUTERNAME)'"
+        }
+    }
+
+    Process { 
+        Write-Log 'Current page file(s):', (Get-PageFile|Out-String) Green,Cyan 
+
+        if ($DriveLetter -in (Get-PageFile).DriveLetter) {
+            (Get-WmiObject -Class Win32_PageFileSetting | ForEach-Object { $_.Name.StartsWith($DriveLetter) }).Delete()
+            Write-Log 'Removed page file from drive',$DriveLetter Green,Cyan
+            Write-Log 'Current page file(s):', (Get-PageFile|Out-String) Green,Cyan 
+            Write-Log 'Remember that a reboot is required to complete this process' Yellow
+        } else {
+            Write-Log 'No page file found on drive',$DriveLetter Yellow,Cyan
+        }
+    }
+
+    End { }
+
 }
 
 ## Result-File
@@ -198,12 +442,6 @@ $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Pri
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $secCurrentContext = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $isSystem = ($secCurrentContext -like "*SYSTEM")
-$allowIcmpV4FirewallRuleName = "Allow_Ping1_ICMPv4" # ICMPv4 Firewall Rule Name
-$allowIcmpV4FirewallRuleDisplayName = "Allow Ping1 ICMPv4" # ICMPv4 Firewall Rule Display Name
-$allowIcmpV4FirewallRuleDescription = "Packet Internet1 ICMPv4"
-$allowIcmpV6FirewallRuleName = "Allow_Ping1_ICMPv6" # ICMPv6 Firewall Rule Name
-$allowIcmpV6FirewallRuleDisplayName = "Allow Ping1 ICMPv6" # ICMPv6 Firewall Rule Display Name
-$allowIcmpV6FirewallRuleDescription = "Packet Internet1 ICMPv6"
 $wmiFirewallRuleDisplayGroup = "Windows Management Instrumentation (WMI)"
 $remoteEventLogFirewallRuleDisplayGroup = "Remote Event Log Management"
 $scheduledTaskNameServerManager = "ServerManager"
@@ -217,6 +455,23 @@ $tempFolder = "C:\Temp" # Temp folder name
 $installFolder = "C:\Install" # Install folder name
 $scriptsFolder = "C:\Scripts" # Install folder name
 $isAzureVm = Get-isAzureVM
+$computerType = ""
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Checks kind of computer
+
+$productType = (Get-CimInstance -ClassName Win32_OperatingSystem).ProductType
+$compName = $env:COMPUTERNAME
+switch ($productType)
+{
+    1 {"$compName is a workstation.";$computerType ="workstation"; break}
+    2 {"$compName is a domain controller.";$computerType ="domain controller"; break}
+    3 {"$compName is a server.";$computerType ="server"; break}
+
+}
+
+Add-Result -description "# $compName is a $computerType" -ok
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -281,24 +536,32 @@ if ($isAdministrator -eq $false) {
 
 ## Allow ICMP (ping) through Windows Firewall for IPv4 and IPv6
 
+$allowIcmpV4FirewallRuleName = "Allow_Ping1_ICMPv4" # ICMPv4 Firewall Rule Name
+$allowIcmpV4FirewallRuleDisplayName = "Allow Ping1 ICMPv4" # ICMPv4 Firewall Rule Display Name
+$allowIcmpV4FirewallRuleDescription = "Packet Internet1 ICMPv4"
+
 # Allow ICMP IPv4
 try {
     Get-NetFirewallRule -Name $allowIcmpV4FirewallRuleName -ErrorAction Stop | Out-Null
-    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv4" -ok
+    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv4 was ok" -ok
 } catch {
     New-NetFirewallRule -Name $allowIcmpV4FirewallRuleName -DisplayName $allowIcmpV4FirewallRuleDisplayName -Description $allowIcmpV4FirewallRuleDescription -Protocol ICMPv4 -IcmpType 8 `
     -Enabled True -Profile Any -Action Allow | Out-Null
-    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv4" -ok -changed
+    Add-Result -description "# Allowed ICMP (ping) through Windows Firewall for IPv4" -ok -changed
 }
+
+$allowIcmpV6FirewallRuleName = "Allow_Ping1_ICMPv6" # ICMPv6 Firewall Rule Name
+$allowIcmpV6FirewallRuleDisplayName = "Allow Ping1 ICMPv6" # ICMPv6 Firewall Rule Display Name
+$allowIcmpV6FirewallRuleDescription = "Packet Internet1 ICMPv6"
 
 # Allow ICMP IPv6
 try {
     Get-NetFirewallRule -Name $allowIcmpV6FirewallRuleName -ErrorAction Stop | Out-Null
-    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv6" -ok
+    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv6 was ok" -ok
 } catch {
     New-NetFirewallRule -Name $allowIcmpV6FirewallRuleName -DisplayName $allowIcmpV6FirewallRuleDisplayName -Description $allowIcmpV6FirewallRuleDescription -Protocol ICMPv6 -IcmpType 8 `
     -Enabled True -Profile Any -Action Allow | Out-Null
-    Add-Result -description "# Allow ICMP (ping) through Windows Firewall for IPv6" -ok -changed
+    Add-Result -description "# Allowed ICMP (ping) through Windows Firewall for IPv6" -ok -changed
 }
 
 Write-Host ($writeEmptyLine + "# ICMP allowed trough Windows Firewall for IPv4 and IPv6" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
@@ -333,8 +596,9 @@ $rdpRegKeyName = "UserAuthentication"
 
 try {
     if ((Get-ItemPropertyValue -Path $rdpRegKeyPath -name $rdpRegKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# Secure RDP authentication Network Level Authentication was allready enabled" -ok
+    Add-Result -description "# Secure RDP authentication Network Level Authentication was already enabled" -ok
 } catch {
+    if (!(Test-Path $rdpRegKeyPath)) { New-Item -Path $rdpRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $rdpRegKeyPath -name $rdpRegKeyName -Value 1 | Out-Null
     Add-Result -description "# Secure RDP authentication Network Level Authentication enabled" -ok -changed
 }
@@ -377,8 +641,9 @@ $uacRegKeyName = "EnableLUA"
 
 try {
     if ((Get-ItemPropertyValue -Path $uacRegKeyPath -name $uacRegKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# User Access Control (UAC) was allready enabled" -ok
+    Add-Result -description "# User Access Control (UAC) was already enabled" -ok
 } catch {
+    if (!(Test-Path $uacRegKeyPath)) { New-Item -Path $uacRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $uacRegKeyPath -Name $uacRegKeyName -Value 1 -Type DWord | Out-Null
     Add-Result -description "# User Access Control (UAC) enabled" -ok -changed
 }
@@ -392,8 +657,9 @@ $rdpPrinterMappingRegKeyName = "fDisableCpm"
 
 try {
     if ((Get-ItemPropertyValue -Path $rdpPrinterMappingRegKeyPath -name $rdpPrinterMappingRegKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# RDP printer mapping was allready disabled" -ok
+    Add-Result -description "# RDP printer mapping was already disabled" -ok
 } catch {
+    if (!(Test-Path $rdpPrinterMappingRegKeyPath)) { New-Item -Path $rdpPrinterMappingRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $rdpPrinterMappingRegKeyPath -Name $rdpPrinterMappingRegKeyName -Value 1 | Out-Null
     Add-Result -description "# RDP printer mapping disabled" -ok -changed
 }
@@ -407,8 +673,9 @@ $adminIESecurityRegKeyName = "IsInstalled"
 
 try {
     if ((Get-ItemPropertyValue -Path $adminIESecurityRegKeyPath -name $adminIESecurityRegKeyName -ErrorAction Stop) -ne 0) { throw "exception" }
-    Add-Result -description "# IE Enhanced Security Configuration for the Administrator was allready disabled" -ok
+    Add-Result -description "# IE Enhanced Security Configuration for the Administrator was already disabled" -ok
 } catch {
+    if (!(Test-Path $adminIESecurityRegKeyPath)) { New-Item -Path $adminIESecurityRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $adminIESecurityRegKeyPath -Name $adminIESecurityRegKeyName -Value 0 | Out-Null
     Add-Result -description "# IE Enhanced Security Configuration for the Administrator disabled" -ok -changed
 
@@ -430,8 +697,9 @@ $wacPopPupKeyName = "DoNotPopWACConsoleAtSMLaunch"
 
 try {
     if ((Get-ItemPropertyValue -Path $serverManagerRegKeyPath -name $wacPopPupKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# Windows Admin Center pop-up was allready disabled" -ok
+    Add-Result -description "# Windows Admin Center pop-up was already disabled" -ok
 } catch {
+    if (!(Test-Path $serverManagerRegKeyPath)) { New-Item -Path $serverManagerRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $serverManagerRegKeyPath -Name $wacPopPupKeyName -Value 1 | Out-Null
     Add-Result -description "# Windows Admin Center pop-up disabled" -ok -changed
 }
@@ -442,7 +710,7 @@ try {
 
 $task = Get-ScheduledTask -TaskName $scheduledTaskNameServerManager
 if ($task.State -eq "Disabled") {
-    Add-Result -description "# Server Manager was allready disabled at startup" -ok
+    Add-Result -description "# Server Manager was already disabled at startup" -ok
 } else {
     $task | Disable-ScheduledTask | Out-Null
     Add-Result -description "# Server Manager disabled at startup" -ok -changed
@@ -455,7 +723,7 @@ if ($task.State -eq "Disabled") {
 if (Get-LocalUser -Name "Gast" -ErrorAction SilentlyContinue) {
     $isDisabled = Get-WmiObject Win32_UserAccount -Computer localhost -Filter "Name = 'Gast'" | Select-Object Name,Disabled
     if ($isDisabled) {
-        Add-Result -description "# Gast account was allready disabled" -ok
+        Add-Result -description "# Gast account was already disabled" -ok
     } else {
         net user guest /active:no | Out-Null
         Add-Result -description "# Gast account disabled" -ok -changed
@@ -465,7 +733,7 @@ if (Get-LocalUser -Name "Gast" -ErrorAction SilentlyContinue) {
 if (Get-LocalUser -Name "Gast" -ErrorAction SilentlyContinue) {
     $isDisabled = Get-WmiObject Win32_UserAccount -Computer localhost -Filter "Name = 'Guest'" | Select-Object Name,Disabled
     if ($isDisabled) {
-        Add-Result -description "# Guest account was allready disabled" -ok
+        Add-Result -description "# Guest account was already disabled" -ok
     } else {
         net user guest /active:no | Out-Null
         Add-Result -description "# Guest account disabled" -ok -changed
@@ -475,7 +743,7 @@ if (Get-LocalUser -Name "Gast" -ErrorAction SilentlyContinue) {
 if (Get-LocalUser -Name "Besucher" -ErrorAction SilentlyContinue) {
     $isDisabled = Get-WmiObject Win32_UserAccount -Computer localhost -Filter "Name = 'Besucher'" | Select-Object Name,Disabled
     if ($isDisabled) {
-        Add-Result -description "# Besucher account was allready disabled" -ok
+        Add-Result -description "# Besucher account was already disabled" -ok
     } else {
         net user guest /active:no | Out-Null
         Add-Result -description "# Besucher account disabled" -ok -changed
@@ -492,7 +760,7 @@ $hibernateKeyName = "HibernateEnabled"
 
 try {
     if ((Get-ItemPropertyValue -Path $hibernateRegKeyPath -name $hibernateKeyName -ErrorAction Stop) -ne 0) { throw "exception" }
-    Add-Result -description "# Hibernation was allready disabled" -ok
+    Add-Result -description "# Hibernation was already disabled" -ok
 } catch {
     powercfg.exe /h off
     Add-Result -description "# Hibernation disabled" -ok -changed
@@ -507,8 +775,9 @@ $windowsDiagnosticLevelRegKeyName = "AllowTelemetry"
 
 try {
     if ((Get-ItemPropertyValue -Path $windowsDiagnosticLevelRegKeyPath -name $windowsDiagnosticLevelRegKeyName -ErrorAction Stop) -ne 0) { throw "exception" }
-    Add-Result -description "# Windows Diagnostic level (Telemetry) was allready set to Security" -ok
+    Add-Result -description "# Windows Diagnostic level (Telemetry) was already set to Security" -ok
 } catch {
+    New-Item $windowsDiagnosticLevelRegKeyPath -Force | Out-Null
     New-ItemProperty -Path $windowsDiagnosticLevelRegKeyPath -Name $windowsDiagnosticLevelRegKeyName -PropertyType "DWord" -Value 0 -Force | Out-Null
     Add-Result -description "# Windows Diagnostic level (Telemetry) set to Security" -ok -changed
 }
@@ -522,8 +791,9 @@ $interActiveLogonRegKeyName = "DontDisplayLastUsername"
 
 try {
     if ((Get-ItemPropertyValue -Path $interActiveLogonRegKeyPath -name $interActiveLogonRegKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# Interactive Login was allready set to - Do not display last user name" -ok
+    Add-Result -description "# Interactive Login was already set to - Do not display last user name" -ok
 } catch {
+    if (!(Test-Path $interActiveLogonRegKeyPath)) { New-Item -Path $interActiveLogonRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $interActiveLogonRegKeyPath -Name $interActiveLogonRegKeyName -Value 1 | Out-Null
     Add-Result -description "# Interactive Login set to - Do not display last user name" -ok -changed
 }
@@ -610,7 +880,7 @@ if ($wasChangedFolderOptions) {
 
 $drive = Get-WmiObject win32_volume -Filter "DriveLetter = 'C:'"
 if ($drive.Label -eq $cDriveLabel ) {
-    Add-Result -description "# Volumelabel of C: was allready set to $cDriveLabel" -ok
+    Add-Result -description "# Volumelabel of C: was already set to $cDriveLabel" -ok
 }else {
     $drive.Label = $cDriveLabel
     $drive.put() | Out-Null
@@ -623,7 +893,7 @@ if ($drive.Label -eq $cDriveLabel ) {
 
 $currentTimezone = Get-TimeZone
 if ($currentTimezone.Id -eq $timezone) {
-    Add-Result -description "# Timezone was allready set to $timezone" -ok
+    Add-Result -description "# Timezone was already set to $timezone" -ok
 } else {
     Set-TimeZone -Name $timezone
     Add-Result -description "# Timezone set to $timezone" -ok -changed
@@ -640,7 +910,7 @@ try {
         powercfg -setactive $highPerf
         Add-Result -description "# Power Management set to $powerManagement" -ok -changed
     }else {
-        Add-Result -description "# Power Management $currPlan was allready set to $powerManagement" -ok 
+        Add-Result -description "# Power Management $currPlan was already set to $powerManagement" -ok 
     }
     
 } catch {
@@ -667,11 +937,11 @@ if ($currentLangAndKeyboard -eq "0409:00000409") {
 ## Built-in Guest Account Not Renamed at Windows Target System
 
 if ($localUser = Get-LocalUser -Name "Besucher" -ErrorAction SilentlyContinue) {
-    if ($localUser.description -eq "") {
+    if ($localUser.description -ne "") {
         Set-LocalUser $localUser -Description ""
         Add-Result -description "# Built-in Guest Account: Besucher description was removed" -ok -changed
     }
-    Add-Result -description "# Built-in Guest Account was allready renamed to Besucher" -ok
+    Add-Result -description "# Built-in Guest Account was already renamed to Besucher" -ok
 }
 
 $users = @("Gast","Guest")
@@ -692,7 +962,7 @@ $users = @("aztmpadmin","azadmin","Administrator")
 $users | ForEach-Object {
     if ($localUser = Get-LocalUser -Name $_ -ErrorAction SilentlyContinue) {
         if ($localUser.description -eq "") {
-            Add-Result -description "# Description was allready removed from Local $_ Account" -ok
+            Add-Result -description "# Description was already removed from Local $_ Account" -ok
         } else {
             Set-LocalUser -Name $_ -Description ""
             Add-Result -description "# Description removed from Local $_ Account" -ok -changed
@@ -711,8 +981,9 @@ $automountRegKeyName = "NoAutoMount"
 
 try {
     if ((Get-ItemPropertyValue -Path $automountRegKeyPath -name $automountRegKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# Automount Disabled was allready disabled" -ok
+    Add-Result -description "# Automount Disabled was already disabled" -ok
 } catch {
+    if (!(Test-Path $automountRegKeyPath)) { New-Item -Path $automountRegKeyPath -Force | Out-Null}
     Set-ItemProperty -Path $automountRegKeyPath -name $automountRegKeyName -Value 1 | Out-Null
     Add-Result -description "# Automount Disabled" -ok -changed
 }
@@ -726,8 +997,9 @@ $ipv4v6RegKeyName = "DisabledComponents"
 
 try {
     if ((Get-ItemPropertyValue -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName -ErrorAction Stop) -ne 32) { throw "exception" }
-    Add-Result -description "# IPv4 before IPv6 was allready enabled" -ok
+    Add-Result -description "# IPv4 before IPv6 was already enabled" -ok
 } catch {
+    New-Item $ipv4v6RegKeyPath -Force | Out-Null
     New-ItemProperty -Path $ipv4v6RegKeyPath -name $ipv4v6RegKeyName -PropertyType DWORD -Value "0x20" | Out-Null
     Add-Result -description "# IPv4 before IPv6 is now enabled" -ok -changed
 }
@@ -741,10 +1013,16 @@ $cfaKeyName = "EnableControlledFolderAccess"
 
 try {
     if ((Get-ItemPropertyValue -Path $cfaKeyPath -name $cfaKeyName -ErrorAction Stop) -ne 2) { throw "exception" }
-    Add-Result -description "# Controlled folder access was allready set to audit mode" -ok
+    Add-Result -description "# Controlled folder access was already set to audit mode" -ok
 } catch {
-    New-ItemProperty -Path $cfaKeyPath -name $cfaKeyName -PropertyType DWORD -Value 2 | Out-Null
-    Add-Result -description "# Set controlled folder access to audit mode" -ok -changed
+    if ($computerType -eq "domain controller") {
+        Add-Result -description "# Skipped DC: Set controlled folder access to audit mode" -ok
+    }else {
+        New-Item $cfaKeyPath -Force | Out-Null
+        New-ItemProperty -Path $cfaKeyPath -name $cfaKeyName -PropertyType DWORD -Value 2 | Out-Null
+        Add-Result -description "# Set controlled folder access to audit mode" -ok -changed
+    }
+    
 }
 
 ## --------
@@ -754,10 +1032,15 @@ $lsaKeyName = "RunAsPPL"
 
 try {
     if ((Get-ItemPropertyValue -Path $lsaKeyPath -name $lsaKeyName -ErrorAction Stop) -ne 1) { throw "exception" }
-    Add-Result -description "# Enable 'Local Security Authority (LSA) protection was allready set" -ok
+    Add-Result -description "# Enable 'Local Security Authority (LSA) protection was already set" -ok
 } catch {
-    New-ItemProperty -Path $lsaKeyPath -name $lsaKeyName -PropertyType DWORD -Value 1 | Out-Null
-    Add-Result -description "# Enable 'Local Security Authority (LSA) protection" -ok -changed
+    if ($computerType -eq "domain controller") {
+        Add-Result -description "# Skipped DC: Enable 'Local Security Authority (LSA) protection" -ok
+    }else {
+        New-Item $lsaKeyPath -Force | Out-Null
+        New-ItemProperty -Path $lsaKeyPath -name $lsaKeyName -PropertyType DWORD -Value 1 | Out-Null
+        Add-Result -description "# Enable 'Local Security Authority (LSA) protection" -ok -changed
+    }
 }
 
 ## --------
@@ -767,42 +1050,53 @@ $enumAdmAccKeyKeyName = "EnumerateAdministrators"
 
 try {
     if ((Get-ItemPropertyValue -Path $enumAdmAccKeyPath -name $enumAdmAccKeyKeyName -ErrorAction Stop) -ne 0) { throw "exception" }
-    Add-Result -description "# Disable 'Enumerate administrator accounts on elevation was allready set" -ok
+    Add-Result -description "# Disable 'Enumerate administrator accounts on elevation was already set" -ok
 } catch {
+    New-Item $enumAdmAccKeyPath -Force | Out-Null
     New-ItemProperty -Path $enumAdmAccKeyPath -name $enumAdmAccKeyKeyName -PropertyType DWORD -Value 0 | Out-Null
     Add-Result -description "# Disable 'Enumerate administrator accounts on elevation" -ok -changed
 }
 
 ## --------
 
-Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" `
--regKey "DisableNotifications"  `
--regValue 1  `
--wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile was allready set" `
--setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile"
+# Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" `
+# -regKey "DisableNotifications"  `
+# -regValue 1  `
+# -wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile was already set" `
+# -setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Domain profile"
 
-## --------
+# ## --------
 
-Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfiles" `
--regKey "DisableNotifications"  `
--regValue 1  `
--wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile was allready set" `
--setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile"
+# Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfiles" `
+# -regKey "DisableNotifications"  `
+# -regValue 1  `
+# -wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile was already set" `
+# -setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile"
 
-## --------
+# ## --------
 
-Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile" `
--regKey "DisableNotifications"  `
--regValue 1  `
--wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile was allready set" `
--setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile"
+# Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile" `
+# -regKey "DisableNotifications"  `
+# -regValue 1  `
+# -wasAllreadySetString "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile was already set" `
+# -setString "Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile"
+
+# Zum Änderungen Rückgängig machen:
+# Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile' -name "DisableNotifications"
+# Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfiles' -name "DisableNotifications"
+# Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile' -name "DisableNotifications"
+
+# Firewallprofile deaktivieren für Troubleshooting:
+# Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\DomainProfile' -name "EnableFirewall" -Value 0
+# Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\PublicProfile' -name "EnableFirewall" -Value 0
+# Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\Standardprofile' -name "EnableFirewall" -Value 0 
 
 ## --------
 
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
 -regKey "LocalAccountTokenFilterPolicy"  `
 -regValue 0  `
--wasAllreadySetString "Enable 'Apply UAC restrictions to local accounts on network logons was allready set" `
+-wasAllreadySetString "Enable 'Apply UAC restrictions to local accounts on network logons was already set" `
 -setString "Enable 'Apply UAC restrictions to local accounts on network logons"
 
 ## --------
@@ -810,7 +1104,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Poli
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections" `
 -regKey "NC_AllowNetBridge_NLA"  `
 -regValue 0  `
--wasAllreadySetString "Disable 'Installation and configuration of Network Bridge on your DNS domain network was allready set" `
+-wasAllreadySetString "Disable 'Installation and configuration of Network Bridge on your DNS domain network was already set" `
 -setString "Disable 'Installation and configuration of Network Bridge on your DNS domain network"
 
 ## --------
@@ -818,7 +1112,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Co
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections" `
 -regKey "NC_StdDomainUserSetLocation"  `
 -regValue 1  `
--wasAllreadySetString "Enable 'Require domain users to elevate when setting a network's location was allready set" `
+-wasAllreadySetString "Enable 'Require domain users to elevate when setting a network's location was already set" `
 -setString "Enable 'Require domain users to elevate when setting a network's location"
 
 ## --------
@@ -826,7 +1120,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Co
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections" `
 -regKey "NC_ShowSharedAccessUI"  `
 -regValue 0  `
--wasAllreadySetString "Prohibit use of Internet Connection Sharing on your DNS domain network was allready set" `
+-wasAllreadySetString "Prohibit use of Internet Connection Sharing on your DNS domain network was already set" `
 -setString "Prohibit use of Internet Connection Sharing on your DNS domain network"
 
 ## --------
@@ -834,7 +1128,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Co
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer" `
 -regKey "AlwaysInstallElevated"  `
 -regValue 0  `
--wasAllreadySetString "Disable 'Always install with elevated privileges was allready set" `
+-wasAllreadySetString "Disable 'Always install with elevated privileges was already set" `
 -setString "Disable 'Always install with elevated privileges"
 
 ## --------
@@ -842,7 +1136,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer"
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" `
 -regKey "NoAutoplayfornonVolume"  `
 -regValue 1  `
--wasAllreadySetString "Disable 'Autoplay for non-volume devices was allready set" `
+-wasAllreadySetString "Disable 'Autoplay for non-volume devices was already set" `
 -setString "Disable 'Autoplay for non-volume devices"
 
 ## --------
@@ -850,7 +1144,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" 
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
 -regKey "NoDriveTypeAutoRun"  `
 -regValue 255  `
--wasAllreadySetString "Disable 'Autoplay' for all drives was allready set" `
+-wasAllreadySetString "Disable 'Autoplay' for all drives was already set" `
 -setString "Disable 'Autoplay' for all drives"
 
 ## --------
@@ -858,7 +1152,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Poli
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
 -regKey "NoAutorun"  `
 -regValue 1  `
--wasAllreadySetString "Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands was allready set" `
+-wasAllreadySetString "Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands was already set" `
 -setString "Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands"
 
 ## --------
@@ -866,7 +1160,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Poli
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" `
 -regKey "AllowBasic"  `
 -regValue 0  `
--wasAllreadySetString "Disable 'Allow Basic authentication' for WinRM Client was allready set" `
+-wasAllreadySetString "Disable 'Allow Basic authentication' for WinRM Client was already set" `
 -setString "Disable 'Allow Basic authentication' for WinRM Client"
 
 ## --------
@@ -874,7 +1168,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Clie
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" `
 -regKey "AllowBasic"  `
 -regValue 0  `
--wasAllreadySetString "Disable 'Allow Basic authentication' for WinRM Service was allready set" `
+-wasAllreadySetString "Disable 'Allow Basic authentication' for WinRM Service was already set" `
 -setString "Disable 'Allow Basic authentication' for WinRM Service"
 
 ## --------
@@ -882,7 +1176,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Serv
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Download" `
 -regKey "RunInvalidSignatures"  `
 -regValue 0  `
--wasAllreadySetString "Disable running or installing downloaded software with invalid signature was allready set" `
+-wasAllreadySetString "Disable running or installing downloaded software with invalid signature was already set" `
 -setString "Disable running or installing downloaded software with invalid signature"
 
 ## --------
@@ -890,7 +1184,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\
 Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" `
 -regKey "DisableIPSourceRouting"  `
 -regValue 2  `
--wasAllreadySetString "Set IPv6 source routing to highest protection was allready set" `
+-wasAllreadySetString "Set IPv6 source routing to highest protection was already set" `
 -setString "Set IPv6 source routing to highest protection"
 #>
 ## --------
@@ -898,7 +1192,7 @@ Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Param
 Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" `
 -regKey "DisableIPSourceRouting"  `
 -regValue 2  `
--wasAllreadySetString "Disable IP source routing was allready set" `
+-wasAllreadySetString "Disable IP source routing was already set" `
 -setString "Disable IP source routing"
 
 ## --------
@@ -906,7 +1200,7 @@ Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parame
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Ext" `
 -regKey "VersionCheckEnabled"  `
 -regValue 1  `
--wasAllreadySetString "Block outdated ActiveX controls for Internet Explorer was allready set" `
+-wasAllreadySetString "Block outdated ActiveX controls for Internet Explorer was already set" `
 -setString "Block outdated ActiveX controls for Internet Explorer"
 
 ## --------
@@ -914,7 +1208,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Poli
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
 -regKey "fAllowToGetHelp"  `
 -regValue 0  `
--wasAllreadySetString "Disable Solicited Remote Assistance was allready set" `
+-wasAllreadySetString "Disable Solicited Remote Assistance was already set" `
 -setString "Disable Solicited Remote Assistance"
 
 ## --------
@@ -922,7 +1216,7 @@ Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Termina
 Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
 -regKey "RestrictAnonymous"  `
 -regValue 1  `
--wasAllreadySetString "Disable Anonymous enumeration of shares was allready set" `
+-wasAllreadySetString "Disable Anonymous enumeration of shares was already set" `
 -setString "Disable Anonymous enumeration of shares"
 
 ## --------
@@ -930,7 +1224,7 @@ Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
 Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
 -regKey "SecurityLayer"  `
 -regValue 2  `
--wasAllreadySetString "Set 'Remote Desktop security level' to 'TLS was allready set" `
+-wasAllreadySetString "Set 'Remote Desktop security level' to 'TLS was already set" `
 -setString "Set 'Remote Desktop security level' to 'TLS"
 
 ## --------
@@ -938,7 +1232,7 @@ Set-RegistryDword -regPath "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Serv
 Set-RegistryDword -regPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
 -regKey "UserAuthentication"  `
 -regValue 1  `
--wasAllreadySetString "Set user authentication for remote connections by using Network Level Authentication to 'Enabled' was allready set" `
+-wasAllreadySetString "Set user authentication for remote connections by using Network Level Authentication to 'Enabled' was already set" `
 -setString "Set user authentication for remote connections by using Network Level Authentication to 'Enabled'"
 
 #reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Nt\CurrentVersion\Winlogon" /v CachedLogonsCount /t REG_DWORD /d 1 /f
@@ -977,6 +1271,8 @@ if (!$NoASR) {
     #Write-Host ($writeEmptyLine + "ASR Rules AuditMode" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
     #Add-MpPreference -AttackSurfaceReductionRules_Ids 01443614-CD74-433A-B99E-2ECDC07BFC25 -AttackSurfaceReductionRules_Actions AuditMode
 
+    $global:mpPref = Get-MpPreference
+
     Write-Host ($writeEmptyLine + "ASR Rules enabled" + $writeSeperatorSpaces + $currentTime) -foregroundcolor $foregroundColor2 $writeEmptyLine
     
     Set-MpPreferenceAndReport -id "56a863a9-875e-4185-98a7-b882c64b5ce5" -text "ASR: Block abuse of exploited vulnerable signed drivers"
@@ -995,39 +1291,37 @@ if (!$NoASR) {
     Set-MpPreferenceAndReport -id "26190899-1602-49E8-8B27-EB1D0A1CE869" -text "ASR: Block Office communication application from creating child processes"
     Set-MpPreferenceAndReport -id "7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c" -text "ASR: Block Adobe Reader from creating child processes"
     Set-MpPreferenceAndReport -id "E6DB77E5-3DF2-4CF1-B95A-636979351E5B" -text "ASR: Block persistence through WMI event subscription"
-   
-    $mpPref = Get-MpPreference
 
     if ($mpPref.EnableNetworkProtection -eq 1) {
-        Add-Result -description "ASR: EnableNetworkProtection was allready enabled" -ok
+        Add-Result -description "ASR: EnableNetworkProtection was already enabled" -ok
     } else {
         Set-MpPreference -EnableNetworkProtection Enabled
         Add-Result -description "ASR: EnableNetworkProtection enabled" -ok -changed
     }
     
     if ($mpPref.PUAProtection -eq 1) {
-        Add-Result -description "ASR: PUAProtection was allready enabled" -ok
+        Add-Result -description "ASR: PUAProtection was already enabled" -ok
     } else {
         Set-MpPreference -PUAProtection Enabled
         Add-Result -description "ASR: PUAProtection enabled" -ok -changed
     }
 
     if ($mpPref.MAPSReporting -eq 2) {
-        Add-Result -description "ASR: MAPSReporting Advanced was allready enabled" -ok
+        Add-Result -description "ASR: MAPSReporting Advanced was already enabled" -ok
     } else {
         Set-MpPreference -MAPSReporting Advanced
         Add-Result -description "ASR: MAPSReporting Advanced enabled" -ok -changed
     }
 
     if ($mpPref.SubmitSamplesConsent -eq 3) {
-        Add-Result -description "ASR: Send all samples automatically was allready enabled" -ok
+        Add-Result -description "ASR: Send all samples automatically was already enabled" -ok
     } else {
         Set-MpPreference -SubmitSamplesConsent SendAllSamples
         Add-Result -description "ASR: Send all samples automatically" -ok -changed
     }
 
     if ($mpPref.ScanScheduleQuickScanTime -eq "12:00:00") {
-        Add-Result -description "Defender: QuickScan at 12:00:00 was allready set" -ok
+        Add-Result -description "Defender: QuickScan at 12:00:00 was already set" -ok
     } else {
         Set-MpPreference -ScanScheduleQuickScanTime 12:00:00
         Add-Result -description "Defender: Set QuickScan at 12:00:00" -ok -changed
@@ -1176,6 +1470,42 @@ if ($isAzureVm) {
 
 ## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+## Set Pagefile to RamSize at B?S Azure VMs
+
+
+if ($isAzureVm) {
+    
+    if ($metadata.compute.vmSize.ToLower() -match "b?s") {
+    
+        $RAM = [Math]::Round((Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize / 1kb)
+        $pagefileD = Get-PageFile | Where-Object { $_.DriveLetter -match "d" }
+        if ($pagefileD) {
+            if ($pagefileD.InitialSizeMB -lt ($RAM + 1)) {
+                $pagefileD.InitialSizeMB = $RAM + 1
+                $pagefileD.MaximumSizeMB = $RAM + 1
+                $volumeD = (get-volume d).SizeRemaining
+                $volumeDinMB = [Math]::Round($volumeD / 1mb)
+                if ($volumeDinMB -gt ($RAM + 1)) {
+                    Set-PageFile -Pagefile $pagefileD
+                    $description = "Pagefile changed to " + $pagefileD.MaximumSize + " : VMSize matches B?s"
+                    Add-Result -description $description -ok -changed  
+                } else {
+                    Add-Result -description "Insufficient disk space on D: for Pagefile: $($pagefileD.MaximumSizeMB)" -failed
+                }
+            } else {
+                Add-Result -description "Pagefile size was already correct" -ok
+            }
+        } else {
+            Add-Result -description "No pagefile for D:\" -failed 
+        }
+    } else {
+        Add-Result -description "Azure VMSize mismatch for pagefile changes" -ok 
+    }
+
+}
+
+## ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 ## Firewall Policys with port 3389 (RDP)
 
 $FireWall = New-Object -comObject HNetCfg.FwPolicy2
@@ -1189,7 +1519,7 @@ ForEach ($Rule In $EnableRules){
     }
 }
 if (!$didChange) {
-    Add-Result -description "All Firewall Policys with Port 3389 (RDP) where allready enabled" -ok
+    Add-Result -description "All Firewall Policys with Port 3389 (RDP) where already enabled" -ok
 }
 
 
