@@ -1475,9 +1475,13 @@ if ($isAzureVm) {
 
 if ($isAzureVm) {
     
-    if ($metadata.compute.vmSize.ToLower() -match "b?s") {
+    $RAM = [Math]::Round((Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize / 1kb)
+
+    if ($metadata.compute.vmSize.ToLower() -match "b[0-9]s") {
+    #BS VMSize
+
+        Write-Host "b?s found"
     
-        $RAM = [Math]::Round((Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize / 1kb)
         $pagefileD = Get-PageFile | Where-Object { $_.DriveLetter -match "d" }
         if ($pagefileD) {
             if ($pagefileD.InitialSizeMB -lt ($RAM + 1)) {
@@ -1487,7 +1491,7 @@ if ($isAzureVm) {
                 $volumeDinMB = [Math]::Round($volumeD / 1mb)
                 if ($volumeDinMB -gt ($RAM + 1)) {
                     Set-PageFile -Pagefile $pagefileD
-                    $description = "Pagefile changed to " + $pagefileD.MaximumSize + " : VMSize matches B?s"
+                    $description = "Pagefile changed to " + $pagefileD.MaximumSize + " : VMSize matches B[0-9]s"
                     Add-Result -description $description -ok -changed  
                 } else {
                     Add-Result -description "Insufficient disk space on D: for Pagefile: $($pagefileD.MaximumSizeMB)" -failed
@@ -1498,8 +1502,90 @@ if ($isAzureVm) {
         } else {
             Add-Result -description "No pagefile for D:\" -failed 
         }
+    } elseif  ($metadata.compute.vmSize.ToLower() -match "b[0-9]ls_v2"){
+
+        Write-Host "b[0-9]ls_v2 found"
+        
+        $pagefileC = Get-PageFile | Where-Object { $_.DriveLetter -match "c" }
+        if ($pagefileC) {
+            if ($pagefileC.InitialSizeMB -lt ($RAM + 1)) {
+                $pagefileC.InitialSizeMB = $RAM + 1
+                $pagefileC.MaximumSizeMB = $RAM + 1
+                $volumeD = (get-volume d).SizeRemaining
+                $volumeDinMB = [Math]::Round($volumeD / 1mb)
+                if ($volumeDinMB -gt ($RAM + 1)) {
+                    Set-PageFile -Pagefile $pagefileC
+                    $description = "Pagefile changed to " + $pagefileC.MaximumSize + " : VMSize matches b[0-9]ls_v2"
+                    Add-Result -description $description -ok -changed  
+                } else {
+                    Add-Result -description "Insufficient disk space on C: for Pagefile: $($pagefileC.MaximumSizeMB)" -failed
+                }
+            } else {
+                Add-Result -description "Pagefile size was already correct" -ok
+            }
+        } else {
+            Set-PageFile -PageFile ([PSCustomObject]@{
+                DriveLetter   = 'c'
+                InitialSizeMB = $RAM + 1 
+                MaximumSizeMB = $RAM + 1 
+              })
+              $pagefileC = Get-PageFile | Where-Object { $_.DriveLetter -match "c" }
+              if ($pagefileC) {
+                Add-Result -description "New pagefile for C:\ was created!" -changed -ok 
+              }else {
+                Add-Result -description "No pagefile for C:\" -failed 
+              }
+            
+        }
     } else {
         Add-Result -description "Azure VMSize mismatch for pagefile changes" -ok 
+    }
+
+}
+
+## Format Disk1 (E:) to GPT 
+
+if ($isAzureVm) {
+    
+    if ((get-disk 1).PartitionStyle -eq "RAW") {
+        Initialize-Disk 1
+        if ((get-disk 1).PartitionStyle -eq "GPT") {
+            $description = "Disk 1 for E:\ changed to " + (get-disk 1).PartitionStyle + "."
+                Add-Result -description $description -ok -changed  
+        } else {
+            Add-Result -description "Disk 1 for E:\ is $((get-disk 1).PartitionStyle)" -failed
+        }
+    } else {
+        Add-Result -description "GPT Disk for E:\ was already correct" -ok 
+    }
+
+}
+
+## Format Disk1 (E:) to NTFS 
+
+if ($isAzureVm) {
+    
+    if ((get-disk 1).PartitionStyle -eq "GPT") {
+        $partitions = (Get-Partition -DiskNumber 1)
+        if ($partitions.type -eq "Basic") {
+            Add-Result -description "Disk 1 has already a Basic Partition" ok
+        } else {
+            $newpartition = new-partition -disknumber 1 -AssignDriveLetter -usemaximumsize | format-volume -filesystem NTFS -newfilesystemlabel NTDS
+            if ( $newpartition.DriveLetter -eq "E" ) {
+                if ( $newpartition.HealthStatus -eq "Healthy" ) {
+                    $description = "Disk 1 for E:\ formated and status is Healthy"
+                    Add-Result -description $description -ok -changed 
+                }else {
+                    Add-Result -description "Disk 1 for E:\ formated but status is not Healthy" -failed
+                }
+            } else {
+                Add-Result -description "Disk 1 formated but driveletter is not E:\" -failed
+            }
+            $description = "Disk 1 for E:\ changed to " + (get-disk 1).PartitionStyle + "."
+            Add-Result -description $description -ok -changed 
+        }
+    } else {
+        Add-Result -description "Disk 1 Format NTFS for E:\ PartitionStyle not GPT" -failed 
     }
 
 }
